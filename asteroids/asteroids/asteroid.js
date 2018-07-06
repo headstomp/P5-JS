@@ -1,71 +1,119 @@
-function Asteroid(x, y, r) {
+///// ASTEROIDS 
 
-    this.rMin = 15;
-    this.rMax = 120;
-    this.r = r || floor(random(this.rMin, this.rMax));
-    this.particle = new Particle(width/2, height/2);
+function Asteroid(pos, s) {
+  if (pos) {
+    this.pos = pos.copy();
+  } else {
+    this.pos = createVector(random(width), random(height));
+  }
+  this.vel = p5.Vector.random2D();
+  this.sides = floor(random(15, 30));
+  if (s) {
+    this.sides = floor(s * 0.5);
+  } else {
+    this.sides = floor(random(15, 30));
+  }
+  this.rmin = 20;
+  this.rmax = 40;
+  this.r = map(this.sides, 15, 30, this.rmin, this.rmax);
+  this.offset = [];
+  for (var i = 0; i < this.sides; i++) {
+    this.offset[i] = random(-5, 5); // alternative // -this.r/8, this.r/8
+  }
+  this.angle = 0;
+  var increment = map(this.r, this.rmin, this.rmax, 0.1, 0.01);
+  if (random() > 0.5) {
+    this.increment = increment * -1;
+  } else {
+    this.increment = increment;
+  }
+}
 
-    // Avoid asteroids from spawning at center,
-    // so no initial collission happens.
-    var d = dist(width/2, height/2, this.particle.pos.x, this.particle.pos.y);
-    var dMin = 1.2*(this.r + 50);
-    if(x && y) {
-        this.particle.pos.x = x;
-        this.particle.pos.y = y;
-    } else {
-        while(d < dMin) {
-            this.particle.pos.x = random(width);
-            this.particle.pos.y = random(height);
-            d = dist(width/2, height/2, this.particle.pos.x, this.particle.pos.y);
-        }
+Asteroid.prototype.explode = function() {
+  //var debrisVel = p5.Vector.random2D().mult(random(0.5, 1.5));
+  var debrisVel = this.vel.copy();
+  var debrisNum = this.r * 5;
+  generateDebris(this.pos, debrisVel, debrisNum); // handeling ship explosion
+}
+
+Asteroid.prototype.breakup = function() {
+  var newA = [];
+  if (this.sides > 5) {
+    newA[0] = new Asteroid(this.pos, this.sides);
+    newA[1] = new Asteroid(this.pos, this.sides);
+  }
+  return newA; // returning the array with my new asteroids
+}
+
+Asteroid.prototype.update = function() {
+  this.pos.add(this.vel);
+  this.angle += this.increment;
+}
+
+Asteroid.prototype.render = function() {
+  push();
+  translate(this.pos.x, this.pos.y);
+  rotate(this.angle);
+  noFill();
+  stroke(255);
+  //ellipse(0, 0, this.r*2, this.r*2);
+  beginShape();
+  for (var i = 0; i < this.sides; i++) {
+    var angle = map(i, 0, this.sides, 0, TWO_PI);
+    var r = this.r + this.offset[i];
+    var x = r * cos(angle);
+    var y = r * sin(angle);
+    vertex(x, y);
+  }
+  endShape(CLOSE);
+  pop();
+}
+
+Asteroid.prototype.edges = function() {
+  if (this.pos.x > width + this.r) {
+    this.pos.x = -this.r;
+  } else if (this.pos.x < -this.r) {
+    this.pos.x = width + this.r;
+  }
+  if (this.pos.y > height + this.r) {
+    this.pos.y = -this.r;
+  } else if (this.pos.y < -this.r) {
+    this.pos.y = height + this.r;
+  }
+}
+
+Asteroid.prototype.setRotation = function(angle) {
+  this.rotation = angle;
+}
+
+Asteroid.prototype.turn = function(angle) {
+  this.heading += this.rotation;
+}
+
+///// DEBRIS
+
+function Debris(pos, vel) {
+  this.pos = pos.copy();
+  this.vel = vel.copy();
+  this.vel.add(p5.Vector.random2D().mult(random(0.5, 1.5)));
+  this.transparency = random(200, 255);
+
+  this.update = function() {
+    this.pos.add(this.vel);
+    this.transparency -= 2;
+  }
+
+  this.render = function() {
+    if (this.transparency > 0) {
+      stroke(this.transparency);
+      point(this.pos.x, this.pos.y);
     }
+  }
+}
 
-    this.particle.vel = p5.Vector.random2D();
-    this.corners = floor(random(4,9));
-    
-    this.radii = [];
-    for(var i = 0; i < this.corners; i++) {
-        this.radii.push(random(0.8*this.r, 1.2*this.r));
-    }
 
-    this.update = function() {
-        this.particle.update();
-        this.particle.edges();
-    }
-
-    this.render = function() {
-        push();
-        stroke(255);
-        fill(51);
-        translate(this.particle.pos.x, this.particle.pos.y);
-        beginShape();
-        for(var i = 0; i < this.corners; i++) {
-            var angle = map(i, 0, this.corners, 0, TWO_PI);
-            var radius = this.radii[i];
-            var x = radius * cos(angle);
-            var y = radius * sin(angle);
-            vertex(x, y);
-        }
-        endShape(CLOSE);
-        // Draw collision circle
-        // noFill();
-        // ellipse(0, 0, 2*this.r);
-        pop();
-    }
-
-    this.split = function() {
-        var childs = [];
-
-        if(this.r > this.rMin*2){
-            childs.push(new Asteroid(this.particle.pos.x, 
-                                     this.particle.pos.y, 
-                                     floor(this.r/2)));
-            childs.push(new Asteroid(this.particle.pos.x, 
-                                     this.particle.pos.y, 
-                                     floor(this.r/2)));
-            childs[0].particle.vel.setMag(this.particle.vel.mag()*1.5);
-            childs[1].particle.vel.setMag(this.particle.vel.mag()*1.5);
-        }
-        return childs;
-    }
+function generateDebris(pos, vel, n) {
+  for (var i = 0; i < n; i++) {
+    debris.push(new Debris(pos, vel));
+  }
 }
